@@ -40,7 +40,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-  list_init (&sleeping_list);
+  list_init(&sleeping_list);
+  printf("THE SLEEPING LIST HAS BEEN INITIALIZED");
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -92,38 +93,20 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks)
 {
-  struct thread *curr;
+  struct thread *current_thread;
+  ASSERT (intr_get_level() == INTR_ON);
 
   enum intr_level old_level = intr_disable ();
-  ASSERT (intr_get_level() == INTR_OFF);
-  
-  curr = thread_current();
-  curr->wake_up_tick = timer_ticks () + ticks;
+  current_thread = thread_current();
+  current_thread->wake_up_tick = timer_ticks () + ticks;
 
-  list_insert_ordered (&sleeping_list, &curr->elem, wake_up_tick_less_func, NULL);
-  //if (list_empty (&sleeping_list))
-  //{
-  //  printf("I HAVE DETERMINED THAT THE SLEEPING LIST IS EMPTY\n");
-  //  list_push_front (&sleeping_list, &curr->elem);
-  //  printf("I PUT THE FIRST THING IN!\n");
-  //}
-  //else
-  //{
-  //  printf("THE LIST WAS NOT EMPTY SO I WILL TRY AN ORDERED INSERT\n");
-  //list_insert_ordered (&sleeping_list, &curr->elem, sleep_ticks_remaining_less_func, NULL);
-  //}
+  list_insert_ordered (&sleeping_list, &current_thread->elem, wake_up_tick_less_func, NULL);
 
-  printf("THE LIST NOW HAS # OF ELEMENTS: ");
-  // AFTER INSERTING THE UISNG LIST_INSERT_ORDERED list-size fails to return correctly
-  printf("%i", (int)list_size(&sleeping_list));
-  printf("\n\n");
+  thread_block();
 
-  sema_down(&curr->sleep_sema);
-  
   intr_set_level (old_level);
 
-  //sema_down(&curr->sleep_sema);
-  
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -208,21 +191,14 @@ timer_interrupt (struct intr_frame *args UNUSED)
   
   while ( !list_empty (&sleeping_list))
   {
-    printf("The sleeping list has something(s) i will check on them.\n");
     current_list_element = list_front(&sleeping_list);
     current_thread = list_entry (current_list_element, struct thread, elem);
-    printf("the top thread's wake_up_tick is: ");
-    printf("%u", (unsigned int)current_thread->wake_up_tick);
-    printf("\n");
-    if (current_thread->wake_up_tick >= ticks)
+    if (current_thread->wake_up_tick > ticks)
     {
-      printf("THERE IS NO NEED TO CONTINUE AS NO THREADS NEED TO BE AWAKENED\n");
       break;
     }
-    printf("THE CURRENT TOP THREAD IS NOW GOING TO BE POPPED\n");
-    list_pop_front (&sleeping_list);
-    printf("I AM UPPING THE TOP THREADS SEMA SO IT WILL BE ADDED TO THE READ LIST\n");
-    sema_up(&current_thread->sleep_sema);
+    list_remove(current_list_element);
+    thread_unblock(current_thread);
   }
 
 }
