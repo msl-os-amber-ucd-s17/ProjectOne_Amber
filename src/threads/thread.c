@@ -24,6 +24,11 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of processes in THREAD_BLOCKED state, that is, processes
+   that have been blocked for some reason and will need to be 
+   unblocked at some point. */
+//static struct list sleeping_list;
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -368,6 +373,22 @@ thread_get_load_avg (void)
   return 0;
 }
 
+/* Returns TRUE if b's remaining sleep ticks is less than a's */
+bool 
+wake_up_tick_less_func(const struct list_elem *a, const struct list_elem *b, void* aux UNUSED)
+{
+  bool less_than = false;
+
+  struct thread* ptr_to_thread_a = list_entry (a, struct thread, elem);
+  struct thread* ptr_to_thread_b = list_entry (b, struct thread, elem);
+
+  if(ptr_to_thread_a->wake_up_tick < ptr_to_thread_b->wake_up_tick)
+  {
+    less_than = true;
+  }
+  return less_than;
+}
+
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
@@ -463,6 +484,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  sema_init (&t->sleep_sema, 0);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
