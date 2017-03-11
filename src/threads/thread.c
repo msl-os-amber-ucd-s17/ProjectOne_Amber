@@ -354,7 +354,7 @@ thread_set_priority (int new_priority)
   // If new priority is greater, donate it
   if (old_priority < thread_current()->priority)
     {
-  //    donate_priority();
+       thread_donate_priority(thread_current());
     }
   // If new priority is less, test if the processor should be yielded
   if (old_priority > thread_current()->priority)
