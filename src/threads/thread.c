@@ -374,25 +374,40 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice) 
 {
-  /* Not yet implemented. */
+  thread_current()->niceness = new_nice;
+  /*recalculate thread's priority*/
+  /*priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)*/
+  /*needs to be truncated*/
+  int prio = (int) PRI_MAX - (thread_get_recent_cpu()/4) - (thread_current()->niceness * 2);
+  //floor(prio);
+  if(prio < PRI_MIN)
+  {
+    thread_current()->priority = PRI_MIN;
+  }
+  if(prio > PRI_MAX)
+  {
+    thread_current()->priority = PRI_MAX;
+  }
+  else
+  {
+    thread_current()->priority = prio;
+  }
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->niceness;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  /*load_avg = (59/60)*load_avg + (1/60)*ready_threads*/
 }
 
 /* Returns TRUE if b's remaining sleep ticks is less than a's */
@@ -640,6 +655,7 @@ bool cmp_priority (const struct list_elem *a,
     }
   return false;
 }
+
 void test_max_priority (void)
 {
   if ( list_empty(&ready_list) )
