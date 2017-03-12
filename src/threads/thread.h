@@ -92,7 +92,7 @@ struct thread
     //struct semaphore sleep_sema;
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;               /* Saved stack pointer. */
-    int niceness                     /*The threads nice value -CL*/
+    int niceness;                     /*The threads nice value -CL*/
     int init_priority;			/* Initial priority */
     int priority;                       /* Priority. */
     int64_t wake_up_tick;		/* Amount of remaining ticks a thread for

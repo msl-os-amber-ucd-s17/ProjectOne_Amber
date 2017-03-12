@@ -375,25 +375,14 @@ thread_get_priority (void)
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int new_nice) 
-{
+{ 
+  enum intr_level old_level = intr_disable();
   thread_current()->niceness = new_nice;
   /*recalculate thread's priority*/
-  /*priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)*/
-  /*needs to be truncated*/
-  int prio = (int) PRI_MAX - (thread_get_recent_cpu()/4) - (thread_current()->niceness * 2);
-  //floor(prio);
-  if(prio < PRI_MIN)
-  {
-    thread_current()->priority = PRI_MIN;
-  }
-  if(prio > PRI_MAX)
-  {
-    thread_current()->priority = PRI_MAX;
-  }
-  else
-  {
-    thread_current()->priority = prio;
-  }
+  thread_update_priority(thread_current());
+  //thread_mlfqs_update_priority(thread*) when we get to that
+  thread_test_preemption();
+  intr_set_level(old_level); 
 }
 
 /* Returns the current thread's nice value. */
@@ -739,6 +728,9 @@ thread_donate_priority (struct thread *t)
 void
 thread_update_priority (struct thread *t)
 {
+  /*priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)*/
+  /*needs to be truncated*/
+  /*int prio = (int) (PRI_MAX - (thread_get_recent_cpu()/4) - (thread_get_nice() * 2)_);*/
   enum intr_level old_level = intr_disable ();
   int max_priority = t->init_priority;
   int lock_priority;
