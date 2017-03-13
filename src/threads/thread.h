@@ -156,7 +156,6 @@ bool cmp_priority (const struct list_elem *a,
 		   const struct list_elem *b,
 		   void *aux UNUSED);
 void test_max_priority (void);
-void thread_test_preemption (void);
 void thread_donate_priority (struct thread *);
 void thread_update_priority (struct thread *);
 void thread_add_lock (struct lock *);

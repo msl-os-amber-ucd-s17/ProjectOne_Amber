@@ -218,7 +218,6 @@ thread_create (const char *name, int priority,
   if (thread_mlfqs)
     thread_mlfqs_update_priority(t);
 
-  //thread_test_preemption ();
   test_max_priority();
   return tid;
 }
@@ -379,7 +378,6 @@ thread_set_priority (int new_priority)
   if (old_priority > thread_current()->priority)
     {
       t->priority = new_priority;
-      //thread_test_preemption ();
       test_max_priority();
     }
   intr_set_level (old_level);
@@ -403,7 +401,6 @@ thread_set_nice (int new_nice)
     thread_mlfqs_update_priority (thread_current ());
   else   
     thread_update_priority(thread_current());
-  //thread_test_preemption();
   test_max_priority ();
   intr_set_level(old_level); 
 }
@@ -441,11 +438,11 @@ wake_up_tick_less_func(const struct list_elem *a, const struct list_elem *b, voi
   return less_than;
 }
 
-/* Returns 100 times the current thread's recent_cpu value. */
+/* Returns 10000 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return FP_ROUND (FP_MULT_MIX (thread_current ()->recent_cpu, 100));
+  return FP_ROUND (FP_MULT_MIX (thread_current ()->recent_cpu, 10000));
 }
 
 void
@@ -529,7 +526,6 @@ thread_mlfqs_refresh(void)
           thread_mlfqs_update_priority (t);
       }
   }
-  //thread_test_preemption();
   test_max_priority();
   
 }
@@ -623,11 +619,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->init_priority = priority;
   list_init (&t->locks);
   t->lock_waiting = NULL;
-  t->niceness = 0;
   if (t == initial_thread)
+  {
+    t->niceness = 0;
     t->recent_cpu = FP_CONST (0);
+  }
   else
+  {
+    t->niceness = thread_get_nice ();
     t->recent_cpu = thread_get_recent_cpu ();
+  }
   t->magic = THREAD_MAGIC;
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -789,17 +790,6 @@ void test_max_priority (void)
   intr_set_level (old_level);
 }
 
-/* Test if current thread should be preempted. */
-void
-thread_test_preemption (void)
-{
-  enum intr_level old_level = intr_disable ();
-  if (!list_empty (&ready_list) && thread_current ()->priority < 
-      list_entry (list_front (&ready_list), struct thread, elem)->priority)
-      thread_yield ();
-  intr_set_level (old_level);
-}
-
 /* Add a held lock to current thread. */
 void
 thread_add_lock (struct lock *lock)
@@ -813,12 +803,12 @@ thread_add_lock (struct lock *lock)
   if (lock->max_priority > thread_current ()->priority)
     {
       thread_current ()->priority = lock->max_priority;
-      //thread_test_preemption ();
       test_max_priority ();
 
     }
   intr_set_level (old_level);
 }
+
 /* Remove a held lock from current thread. */
 void
 thread_remove_lock (struct lock *lock)
@@ -829,6 +819,7 @@ thread_remove_lock (struct lock *lock)
   thread_update_priority (thread_current ());
   intr_set_level (old_level);
 }
+
 /* Donate current thread's priority to another thread. */
 void
 thread_donate_priority (struct thread *t)
