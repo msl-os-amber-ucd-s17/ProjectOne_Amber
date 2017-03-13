@@ -162,5 +162,10 @@ void thread_update_priority (struct thread *);
 void thread_add_lock (struct lock *);
 void thread_remove_lock (struct lock *);
 
+void thread_mlfqs_incr_recent_cpu(void);
+void thread_mlfqs_calc_recent_cpu(struct thread *);
+void thread_mlfqs_update_priority(struct thread *);
+void thread_mlfqs_refresh(void);
+
 bool wake_up_tick_less_func(const struct list_elem*, const struct list_elem*, void* aux); 
 #endif /* threads/thread.h */
