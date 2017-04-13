@@ -36,10 +36,22 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  // --- old code 
+  strlcpy(fn_copy, file_name, PGSIZE);
+  // ----
+  char *f_namecpy;
+  char *f_name;
+  char *save_ptr;
+  f_namecpy = malloc(strlen(file_name)+1);
+  strlcpy (f_namecpy, file_name, strlen(file_name)+1);
+  f_namecpy = strtok_r (f_namecpy, " ", &save_ptr);
+  printf ("MJV here name: %s\n", f_namecpy);
+  
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (f_namecpy, PRI_DEFAULT, start_process, fn_copy);
+  free (f_name);
+  printf ("carne?\n");
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -50,10 +62,10 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  printf ("MIKEY WAS HERE \n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -195,7 +207,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, const char *file_name);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -222,7 +234,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  file = filesys_open (file_name);
+  char *f_namecpy;
+  char *save_ptr;
+  f_namecpy = malloc(strlen(file_name)+1);
+  strlcpy (f_namecpy, file_name, strlen(file_name)+1);
+  f_namecpy = strtok_r (f_namecpy, " ", &save_ptr);
+  file = filesys_open (f_namecpy);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -302,7 +319,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, file_name))
     goto done;
 
   /* Start address. */
@@ -427,8 +444,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, const char *file_name) 
 {
+  printf ("SETUP STACK START SHOULD SEE \n");
+  printf ("setup stack filename: %s\n",file_name);
   uint8_t *kpage;
   bool success = false;
 
@@ -436,11 +455,78 @@ setup_stack (void **esp)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success) { 
         *esp = PHYS_BASE;
+        
+        char *token, *save_ptr;
+        int argc = 0;
+        int i;
+        char *f_copy = malloc(sizeof(file_name)+1);
+        
+        strlcpy (f_copy, file_name, strlen(file_name)+1);
+        free(f_copy);
+        
+	// count how many arguments, store in argc
+        for (token = strtok_r (f_copy, " ", &save_ptr); token != NULL;
+            token = strtok_r (NULL, " ", &save_ptr))
+        {
+            argc++;
+        }
+        
+        int *argv = calloc(argc, sizeof(int)); 
+
+        i = 0;
+        // ----- works above
+        // push values into argv
+        printf ("file_name= %s\n", file_name);
+           printf ("before loop, &*esp: %p\n", (*esp));
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; 
+             token = strtok_r (NULL, " ", &save_ptr))
+        {   
+           printf ("*esp beginning: %s\n", *esp);
+	   // tab here
+           *esp -= 1;
+           printf ("beginning of loop, &*esp: %p\n", (*esp));
+           printf ("*esp after shift: %s\n", *esp);
+           printf ("for loop %i: %s\n", i, token);
+           memcpy(*esp, token, 16);
+           // Question this? can you take a int * to argv[i]
+           argv[i] = *esp;
+           printf ("&argv[i]: %p\n", argv[i]);
+           printf ("argv[i]: %s\n", argv[i]);
+           printf ("&*esp: %p\n", (*esp));
+           printf ("*esp after assignment: %s\n", *esp);
+   	   printf ("value of i:%i \n", i);
+           
+           i++;
+        }
+        hex_dump(PHYS_BASE - 100, *esp, 100, true);
+        printf ("setup stack\n");
+      /* 
+        // word align
+        while ((int) *esp % 4 != 0)
+        {
+          *esp--;
+          int x = 0; 
+          memcpy (*esp, &x, 1);
+        }
+        
+        // loop down, ex. argv[3]... then arg[2]... etc.
+        for (i = argc - 1; i >= 0; i--)
+        {
+          // decrement by 4
+          *esp -= sizeof(int);
+          
+          memcpy(*esp, &argv[i], sizeof(int));         
+        } 
+       */  
+      }
       else
-        palloc_free_page (kpage);
+      {
+        palloc_free_page (kpage); 
+      }
     }
+  
   return success;
 }
 
