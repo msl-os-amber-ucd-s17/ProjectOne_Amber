@@ -208,9 +208,8 @@ static void
 write (struct intr_frame *f UNUSED)
 { 
   int *stack_pointer = f->esp;
-  
   //write (int fd, const void *buffer, unsigned size)
-  printf ("write called!\n");
+  printf ("write called-- %p!\n", stack_pointer);
 }
 
 static void

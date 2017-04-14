@@ -464,7 +464,6 @@ setup_stack (void **esp, const char *file_name)
         char *f_copy = malloc(sizeof(file_name)+1);
         
         strlcpy (f_copy, file_name, strlen(file_name)+1);
-        free(f_copy);
         
 	// count how many arguments, store in argc
         for (token = strtok_r (f_copy, " ", &save_ptr); token != NULL;
@@ -474,9 +473,10 @@ setup_stack (void **esp, const char *file_name)
         }
         
         int *argv = calloc(argc, sizeof(int)); 
+        free(f_copy);
 
         i = 0;
-        // ----- works above
+
         // push values into argv
         printf ("file_name= %s\n", file_name);
            printf ("before loop, &*esp: %p\n", (*esp));
@@ -485,11 +485,11 @@ setup_stack (void **esp, const char *file_name)
         {   
            printf ("*esp beginning: %s\n", *esp);
 	   // tab here
-           *esp -= 1;
+           *esp -= strlen(token)+1;
            printf ("beginning of loop, &*esp: %p\n", (*esp));
            printf ("*esp after shift: %s\n", *esp);
            printf ("for loop %i: %s\n", i, token);
-           memcpy(*esp, token, 16);
+           memcpy(*esp, token, strlen(token)+1);
            // Question this? can you take a int * to argv[i]
            argv[i] = *esp;
            printf ("&argv[i]: %p\n", argv[i]);
@@ -498,18 +498,22 @@ setup_stack (void **esp, const char *file_name)
            printf ("*esp after assignment: %s\n", *esp);
    	   printf ("value of i:%i \n", i);
            
+           //hex_dump(*esp - 100, *esp - 100, 100, true);
+           hex_dump(PHYS_BASE - 100, PHYS_BASE - 100, 100, true);
            i++;
         }
-        hex_dump(PHYS_BASE - 100, *esp, 100, true);
+        //hex_dump(PHYS_BASE - 100, *esp, 100, true);
         printf ("setup stack\n");
-      /* 
+       
+
         // word align
         while ((int) *esp % 4 != 0)
         {
-          *esp--;
+          *esp -= sizeof(char);
           int x = 0; 
-          memcpy (*esp, &x, 1);
+          memcpy (*esp, &x, sizeof(char));
         }
+           //hex_dump(PHYS_BASE - 100, PHYS_BASE - 100, 100, true);
         
         // loop down, ex. argv[3]... then arg[2]... etc.
         for (i = argc - 1; i >= 0; i--)
@@ -519,7 +523,22 @@ setup_stack (void **esp, const char *file_name)
           
           memcpy(*esp, &argv[i], sizeof(int));         
         } 
-       */  
+
+        *esp -= sizeof(int);
+        memcpy(*esp, argv, sizeof(int));         
+        *esp -= sizeof(int);
+        memcpy(*esp, &argc, sizeof(int));         
+        *esp -= sizeof(int);
+        int test = 0;
+        void *testReturn = &test;
+        memcpy(*esp, *testReturn, sizeof(int));         
+       
+        
+        
+        // ----- works above
+
+           hex_dump(PHYS_BASE - 100, PHYS_BASE - 100, 100, true);
+         
       }
       else
       {
