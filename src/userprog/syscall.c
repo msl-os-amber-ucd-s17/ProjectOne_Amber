@@ -8,7 +8,7 @@
 static void syscall_handler (struct intr_frame *);
 static bool check_pointer_address (const void *p);
 static void halt (void);
-static void exit (struct intr_frame *, int);
+static void exit (struct intr_frame *);
 static void exec (struct intr_frame *);
 static void wait (struct intr_frame *);
 static void create (struct intr_frame *);
@@ -16,7 +16,7 @@ static void remove (struct intr_frame *);
 static void open (struct intr_frame *);
 static void filesize (struct intr_frame *);
 static void read (struct intr_frame *);
-static void write (struct intr_frame *);
+static int write (struct intr_frame *);
 static void seek (struct intr_frame *);
 static void tell (struct intr_frame *);
 static void close (struct intr_frame *);
@@ -30,14 +30,14 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf ("system call handler !\n");
+  //printf ("system call handler !\n");
 
   int * stack_pointer = f->esp;
 
   if (!check_pointer_address (stack_pointer))
   {
     printf ("not valid address, calling thread exit...\n");
-    exit (f, -1); 
+    exit (f); 
   }
 
   int systemCall =  *stack_pointer;
@@ -49,7 +49,7 @@ syscall_handler (struct intr_frame *f UNUSED)
  
     break;
     case SYS_EXIT:
-      exit (f, 0); 
+      exit (f); 
     break; 
     case SYS_EXEC:
       exec (f);
@@ -81,6 +81,7 @@ syscall_handler (struct intr_frame *f UNUSED)
     break;
     case SYS_WRITE:
       write (f);
+      return 0;
 
     break;
     case SYS_SEEK:
@@ -96,7 +97,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   
     break;
     default:
-    printf ("DEFAULT STATEMENT, thread exit will be called...\n");
+    //printf ("DEFAULT STATEMENT, thread exit will be called...\n");
     thread_exit ();
   }
   thread_exit ();
@@ -138,13 +139,11 @@ halt (void)
 }
 
 static void
-exit (struct intr_frame *f UNUSED, int status)
+exit (struct intr_frame *f UNUSED)
 { 
-  if (status == -1)
-  {
-    thread_exit ();
-  }
- 
+  if(f->eax == -1)
+    thread_exit();
+  f->eax = 0;
   // exit (int status)
   printf ("Exit call!\n");
   // write code here
@@ -204,12 +203,24 @@ read (struct intr_frame *f UNUSED)
   printf ("read called!\n");
 }
 
-static void 
+static int 
 write (struct intr_frame *f UNUSED)
 { 
   int *stack_pointer = f->esp;
-  //write (int fd, const void *buffer, unsigned size)
-  printf ("write called-- %p!\n", stack_pointer);
+  void** sp_cpy = f->esp;
+
+
+  int fd = (int) *(sp_cpy + 1);
+  if(fd == STDOUT_FILENO) {
+
+    const char* buffer = (char *) *(sp_cpy + 2);
+    size_t size = (size_t) *(sp_cpy + 3);
+    putbuf(buffer, size);
+
+    f->eax = size;
+    return 0;
+  }
+
 }
 
 static void

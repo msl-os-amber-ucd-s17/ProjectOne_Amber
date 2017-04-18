@@ -21,6 +21,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -44,14 +45,11 @@ process_execute (const char *file_name)
   char *save_ptr;
   f_namecpy = malloc(strlen(file_name)+1);
   strlcpy (f_namecpy, file_name, strlen(file_name)+1);
-  f_namecpy = strtok_r (f_namecpy, " ", &save_ptr);
-  printf ("MJV here name: %s\n", f_namecpy);
-  
+  f_namecpy = strtok_r (f_namecpy, " ", &save_ptr); 
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (f_namecpy, PRI_DEFAULT, start_process, fn_copy);
   free (f_name);
-  printf ("carne?\n");
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -62,7 +60,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  printf ("MIKEY WAS HERE \n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -71,12 +68,13 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+    
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
+    thread_exit();
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -100,6 +98,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+
   return -1;
 }
 
@@ -126,6 +125,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  //printf("%s: exit(%d)\n", string, exitcode);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -212,6 +212,12 @@ static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+
+static int get_argument_count(void** esp, const char* file_name);
+static void push_user_arguments(void **esp, const char* file_name, int argc, int* argv);
+static void page_align(void **esp);
+static void push_user_argument_address(void **esp, const char* file_name, int argc, int* argv);
+static void push_fake_address(void **esp);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -322,6 +328,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (!setup_stack (esp, file_name))
     goto done;
 
+
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
@@ -329,7 +336,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  // DO NOT CLOSE THE FILE UNTIL THE CHILD PROCESS IS DONE RUNNING
+  //file_close (file);
   return success;
 }
 
@@ -446,8 +454,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, const char *file_name) 
 {
-  printf ("SETUP STACK START SHOULD SEE \n");
-  printf ("setup stack filename: %s\n",file_name);
   uint8_t *kpage;
   bool success = false;
 
@@ -455,90 +461,16 @@ setup_stack (void **esp, const char *file_name)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) { 
+      if (success) 
+      { 
         *esp = PHYS_BASE;
-        
-        char *token, *save_ptr;
-        int argc = 0;
-        int i;
-        char *f_copy = malloc(sizeof(file_name)+1);
-        
-        strlcpy (f_copy, file_name, strlen(file_name)+1);
-        
-	// count how many arguments, store in argc
-        for (token = strtok_r (f_copy, " ", &save_ptr); token != NULL;
-            token = strtok_r (NULL, " ", &save_ptr))
-        {
-            argc++;
-        }
-        
-        int *argv = calloc(argc, sizeof(int)); 
-        free(f_copy);
+        int argc = get_argument_count (esp, file_name);
+        int argv[argc];
 
-        i = 0;
-
-        // push values into argv
-        printf ("file_name= %s\n", file_name);
-           printf ("before loop, &*esp: %p\n", (*esp));
-	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; 
-             token = strtok_r (NULL, " ", &save_ptr))
-        {   
-           printf ("*esp beginning: %s\n", *esp);
-	   // tab here
-           *esp -= strlen(token)+1;
-           printf ("beginning of loop, &*esp: %p\n", (*esp));
-           printf ("*esp after shift: %s\n", *esp);
-           printf ("for loop %i: %s\n", i, token);
-           memcpy(*esp, token, strlen(token)+1);
-           // Question this? can you take a int * to argv[i]
-           argv[i] = *esp;
-           printf ("&argv[i]: %p\n", argv[i]);
-           printf ("argv[i]: %s\n", argv[i]);
-           printf ("&*esp: %p\n", (*esp));
-           printf ("*esp after assignment: %s\n", *esp);
-   	   printf ("value of i:%i \n", i);
-           
-           //hex_dump(*esp - 100, *esp - 100, 100, true);
-           hex_dump(PHYS_BASE - 100, PHYS_BASE - 100, 100, true);
-           i++;
-        }
-        //hex_dump(PHYS_BASE - 100, *esp, 100, true);
-        printf ("setup stack\n");
-       
-
-        // word align
-        while ((int) *esp % 4 != 0)
-        {
-          *esp -= sizeof(char);
-          int x = 0; 
-          memcpy (*esp, &x, sizeof(char));
-        }
-           //hex_dump(PHYS_BASE - 100, PHYS_BASE - 100, 100, true);
-        
-        // loop down, ex. argv[3]... then arg[2]... etc.
-        for (i = argc - 1; i >= 0; i--)
-        {
-          // decrement by 4
-          *esp -= sizeof(int);
-          
-          memcpy(*esp, &argv[i], sizeof(int));         
-        } 
-
-        *esp -= sizeof(int);
-        memcpy(*esp, argv, sizeof(int));         
-        *esp -= sizeof(int);
-        memcpy(*esp, &argc, sizeof(int));         
-        *esp -= sizeof(int);
-        int test = 0;
-        void *testReturn = &test;
-        memcpy(*esp, *testReturn, sizeof(int));         
-       
-        
-        
-        // ----- works above
-
-           hex_dump(PHYS_BASE - 100, PHYS_BASE - 100, 100, true);
-         
+        push_user_arguments (esp, file_name, argc, &argv);
+        page_align (esp);
+        push_user_argument_address (esp, file_name, argc, &argv);
+        push_fake_address (esp);
       }
       else
       {
@@ -567,4 +499,84 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static int get_argument_count (void** esp, const char* file_name)
+{
+  int ret = 0;
+  
+  // Create a copy of file_name
+  char *token, *save_ptr;
+  char *f_copy = malloc (sizeof (char) * strlen (file_name)+1);
+  strlcpy (f_copy, file_name, strlen (file_name)+1);
+
+  // Use the tokenizer to get the number of arguments
+  for (token = strtok_r (f_copy, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr))
+  {
+    ret++;
+  }
+  free(f_copy);
+  return ret;
+}
+
+static void push_user_arguments (void **esp, const char* file_name, int argc, int* argv)
+{
+  int i = 0;
+  char *argl[argc];
+  char *token, *save_ptr;
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr))
+  {
+    // *esp -= strlen (token) + 1;
+    // memcpy (*esp, token, strlen (token) + 1);
+    // argv[i] = *esp;
+    // i++;
+    argl[i] = token;
+    i++;
+  }
+  for(i = argc - 1; i >= 0; i--){
+    *esp -= strlen(argl[i]) + 1;
+    memcpy (*esp, argl[i], strlen(argl[i]) + 1);
+    argv[i] = *esp;
+  }
+
+}
+
+static void page_align (void **esp)
+{
+  while ((int) *esp % 4 != 0)
+  {
+    *esp -= sizeof(char);
+    uint8_t x = 0;
+    memcpy (*esp, &x, sizeof(char));
+  }
+}
+
+static void push_user_argument_address (void **esp, const char* file_name, int argc, int* argv)
+{
+  char* nps = 0;
+  *esp -= sizeof(nps);
+  memcpy(*esp, &nps, sizeof(nps));
+
+  for (int i = argc - 1; i >= 0; --i)
+  {
+    *esp -= sizeof(void*);
+    memcpy (*esp, &argv[i], sizeof(void*));
+  }
+
+  void** argvPtr = *esp;
+  *esp -= sizeof(void*);
+  memcpy (*esp, &argvPtr, sizeof(void*));
+  *esp -= sizeof(void*);
+  memcpy (*esp, &argc, sizeof(int));
+}
+
+static void push_fake_address(void **esp)
+{
+  // NOT WORKING
+  //char* fake_address;
+  int fake_address = 0123;
+  *esp -= sizeof(void*);
+  memcpy (*esp, &fake_address, sizeof(void*));
 }
