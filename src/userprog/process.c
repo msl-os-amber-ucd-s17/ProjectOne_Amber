@@ -41,7 +41,6 @@ process_execute (const char *file_name)
   strlcpy(fn_copy, file_name, PGSIZE);
   // ----
   char *f_namecpy;
-  char *f_name;
   char *save_ptr;
   f_namecpy = malloc(strlen(file_name)+1);
   strlcpy (f_namecpy, file_name, strlen(file_name)+1);
@@ -49,9 +48,20 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (f_namecpy, PRI_DEFAULT, start_process, fn_copy);
-  free (f_name);
+  printf ("WHAT DO YOU wANT ----MJV\n");
+  free (f_namecpy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+
+  printf ("WHAT DO YOU wANT TWO----MJV\n");
+  // MJV -- 
+  sema_down(&thread_current()->child_lock);
+  printf ("sema down --- MJV\n");
+
+  // MJV --
+  if(!thread_current()->success)
+    return -1;
+
   return tid;
 }
 
@@ -60,6 +70,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  printf ("start process --- MJV\n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -72,9 +83,21 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
+printf ("carne ---- MJV\n");
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success) { 
+    // MJV --
+    thread_current()->parent->success=false;
+    sema_up(&thread_current()->parent->child_lock);
     thread_exit();
+  } 
+  else 
+  {
+    // MJV --
+    thread_current()->parent->success=true;
+    sema_up(&thread_current()->parent->child_lock);
+
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -96,8 +119,39 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+
+  struct list_elem *e;
+
+  struct child *ch=NULL;
+  struct list_elem *e1=NULL;
+  
+  // MJV -- 
+  struct list child_process = thread_current()->child_process;
+
+  for (e = list_begin (&child_process); e != list_end (&child_process);
+           e = list_next (e))
+  {
+    struct child *f = list_entry (e, struct child, elem);
+    if(f->tid == child_tid)
+    {
+      ch = f;
+      e1 = e;
+    }
+  }
+
+
+  if(!ch || !e1)
+    return -1;
+
+  thread_current()->waiting_on_child = ch->tid;
+    
+  if(!ch->used)
+    sema_down(&thread_current()->child_lock);
+
+  int temp = ch->exit_error;
+  list_remove(e1);
 
   return -1;
 }
@@ -108,6 +162,17 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  
+  //if(cur->exit_error==-1)
+      //exit (-1);
+
+  int exit_code = cur->exit_error;
+  printf("%s: exit(%d)\n",cur->name,exit_code);
+
+  acquire_filesys_lock();
+  file_close (thread_current()->own);
+  //close_all_files (&thread_current()->files);
+  release_filesys_lock();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -234,6 +299,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   /* Allocate and activate page directory. */
+  acquire_filesys_lock();
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
@@ -246,6 +312,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   strlcpy (f_namecpy, file_name, strlen(file_name)+1);
   f_namecpy = strtok_r (f_namecpy, " ", &save_ptr);
   file = filesys_open (f_namecpy);
+  free (f_namecpy);
+
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -333,11 +401,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
+  // MJV -- 
+  file_deny_write(file);
 
+  thread_current()->own = file;
  done:
   /* We arrive here whether the load is successful or not. */
   // DO NOT CLOSE THE FILE UNTIL THE CHILD PROCESS IS DONE RUNNING
-  //file_close (file);
+  file_close (file);
   return success;
 }
 
@@ -457,6 +528,7 @@ setup_stack (void **esp, const char *file_name)
   uint8_t *kpage;
   bool success = false;
 
+    printf ("SETUP STACK BEFORE ALL SHIT \n");
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
@@ -464,20 +536,23 @@ setup_stack (void **esp, const char *file_name)
       if (success) 
       { 
         *esp = PHYS_BASE;
-        int argc = get_argument_count (esp, file_name);
-        int argv[argc];
-
-        push_user_arguments (esp, file_name, argc, &argv);
-        page_align (esp);
-        push_user_argument_address (esp, file_name, argc, &argv);
-        push_fake_address (esp);
       }
       else
       {
         palloc_free_page (kpage); 
       }
     }
-  
+
+    printf ("SETUP STACK AFTER ALL SHIT \n");
+    int argc = get_argument_count (esp, file_name);
+    int *argv = calloc(argc,sizeof(int));
+
+    push_user_arguments (esp, file_name, argc, argv);
+    //page_align (esp);
+    push_user_argument_address (esp, file_name, argc, argv);
+    push_fake_address (esp);
+    
+  free(argv);
   return success;
 }
 
@@ -507,7 +582,7 @@ static int get_argument_count (void** esp, const char* file_name)
   
   // Create a copy of file_name
   char *token, *save_ptr;
-  char *f_copy = malloc (sizeof (char) * strlen (file_name)+1);
+  char *f_copy = malloc (strlen (file_name)+1);
   strlcpy (f_copy, file_name, strlen (file_name)+1);
 
   // Use the tokenizer to get the number of arguments
@@ -523,23 +598,23 @@ static int get_argument_count (void** esp, const char* file_name)
 static void push_user_arguments (void **esp, const char* file_name, int argc, int* argv)
 {
   int i = 0;
-  char *argl[argc];
   char *token, *save_ptr;
   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr))
   {
-    // *esp -= strlen (token) + 1;
-    // memcpy (*esp, token, strlen (token) + 1);
-    // argv[i] = *esp;
+    *esp -= strlen (token) + 1;
+    memcpy (*esp, token, strlen (token) + 1);
+    argv[i] = *esp;
     // i++;
-    argl[i] = token;
+    //argl[i] = token;
     i++;
   }
-  for(i = argc - 1; i >= 0; i--){
-    *esp -= strlen(argl[i]) + 1;
-    memcpy (*esp, argl[i], strlen(argl[i]) + 1);
-    argv[i] = *esp;
-  }
+ 
+  page_align(esp);
+
+  int zero = 0;
+  *esp-=sizeof(int);
+  memcpy(*esp,&zero,sizeof(int));
 
 }
 
@@ -548,35 +623,34 @@ static void page_align (void **esp)
   while ((int) *esp % 4 != 0)
   {
     *esp -= sizeof(char);
-    uint8_t x = 0;
+    char x = 0;
     memcpy (*esp, &x, sizeof(char));
   }
 }
 
 static void push_user_argument_address (void **esp, const char* file_name, int argc, int* argv)
 {
-  char* nps = 0;
-  *esp -= sizeof(nps);
-  memcpy(*esp, &nps, sizeof(nps));
-
-  for (int i = argc - 1; i >= 0; --i)
-  {
-    *esp -= sizeof(void*);
-    memcpy (*esp, &argv[i], sizeof(void*));
+  int i;
+  for(i = argc - 1; i >= 0; i--){
+    *esp-=sizeof(int);
+    memcpy(*esp,&argv[i],sizeof(int));
+    /**esp -= strlen(argl[i]) + 1;
+    memcpy (*esp, argl[i], strlen(argl[i]) + 1);
+    argv[i] = *esp;*/
   }
 
-  void** argvPtr = *esp;
-  *esp -= sizeof(void*);
-  memcpy (*esp, &argvPtr, sizeof(void*));
-  *esp -= sizeof(void*);
-  memcpy (*esp, &argc, sizeof(int));
+  int nps = *esp;
+  *esp -= sizeof(int);
+  memcpy(*esp, &nps, sizeof(int));
+
+  *esp -= sizeof(int);
+  memcpy(*esp,&argc,sizeof(int));
 }
 
 static void push_fake_address(void **esp)
 {
   // NOT WORKING
-  //char* fake_address;
-  int fake_address = 0123;
-  *esp -= sizeof(void*);
-  memcpy (*esp, &fake_address, sizeof(void*));
+  int fake_address = 0;
+  *esp -= sizeof(int);
+  memcpy (*esp, &fake_address, sizeof(int));
 }

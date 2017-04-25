@@ -11,7 +11,6 @@ void process_activate (void);
 struct child_parent {
   struct list_elem child;
   uint8_t child_parent_status;
-  struct lock;
   tid_t child_tid;
   uint8_t exit_code;
   struct semaphore child_dead;
