@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include <kernel/list.h>
 #include "fixed_point.h"
 
 /* States in a thread's life cycle. */
@@ -115,6 +116,28 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    bool success;
+    struct thread *parent;
+    struct list child_process;
+    struct list files;
+    int fd_count;
+
+    struct file *own;
+    
+    struct semaphore child_lock;
+    int waiting_on_child;
+
+    int exit_error;
+  };
+
+struct child
+  {
+    tid_t tid;
+    struct list_elem elem;
+    int exit_error;
+    bool used;
+
   };
 
 /* If false (default), use round-robin scheduler.

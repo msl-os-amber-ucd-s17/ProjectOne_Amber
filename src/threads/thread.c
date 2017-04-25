@@ -43,6 +43,8 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+// MJV --
+struct lock filesys_lock;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -70,6 +72,8 @@ fixed_t load_avg;
 
 static void kernel_thread (thread_func *, void *aux);
 
+ void acquire_filesys_lock();
+ void release_filesys_lock();
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
@@ -101,6 +105,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&filesys_lock);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -197,6 +202,10 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  struct child* c = malloc(sizeof(*c));
+  c->tid = tid;
+  c->exit_error = t->exit_error;
+  c->used = false;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -911,3 +920,14 @@ thread_update_priority (struct thread *t)
   t->priority = max_priority;
   intr_set_level (old_level);
 }
+
+void acquire_filesys_lock()
+{
+  lock_acquire(&filesys_lock);
+}
+
+void release_filesys_lock()
+{
+  lock_release(&filesys_lock);
+}
+
